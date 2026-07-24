@@ -1,3 +1,4 @@
 .env
 *.log
+config.php
 node_modules/

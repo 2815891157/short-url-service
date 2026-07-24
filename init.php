@@ -1,4 +1,9 @@
 <?php
+// 数据库连接 + 工具函数
+if (!file_exists(__DIR__ . '/config.php')) {
+    header('Location: setup.php');
+    exit;
+}
 require_once __DIR__ . '/config.php';
 
 function get_db() {
@@ -14,36 +19,19 @@ function get_db() {
     return $db;
 }
 
-function init_db() {
-    $db = get_db();
-    $sql = "CREATE TABLE IF NOT EXISTS `links` (
-        `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-        `slug` VARCHAR(32) NOT NULL UNIQUE,
-        `original_url` TEXT NOT NULL,
-        `title` VARCHAR(255) DEFAULT '',
-        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-        `visit_count` INT UNSIGNED DEFAULT 0
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-    $db->query($sql);
-}
-
-function json_response($data, $code = 200) {
+function json_resp($data, $code = 200) {
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($data, JSON_UNESCAPED_UNICODE);
     exit;
 }
 
-function nanoid($length = NANOID_LEN) {
-    $chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-';
-    $max = strlen($chars) - 1;
+function nanoid($len = 7) {
+    $c = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_-';
+    $max = strlen($c) - 1;
     $id = '';
-    for ($i = 0; $i < $length; $i++) {
-        $id .= $chars[random_int(0, $max)];
+    for ($i = 0; $i < $len; $i++) {
+        $id .= $c[random_int(0, $max)];
     }
     return $id;
-}
-
-function escape_attr($str) {
-    return htmlspecialchars($str, ENT_QUOTES, 'UTF-8');
 }
