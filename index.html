@@ -18,26 +18,25 @@
       </nav>
     </div>
   </header>
-
   <main class="container">
     <section id="tab-create" class="tab-content active">
       <div class="card">
         <h2 class="card-title"><i class="ph ph-link"></i> 创建短链接</h2>
         <form id="create-form">
           <div class="form-group">
-            <label>目标网址 <span class="req">*</span></label>
+            <label for="original-url">目标网址 <span class="required">*</span></label>
             <input type="url" id="original-url" placeholder="https://example.com/your-long-url" required>
           </div>
           <div class="form-row">
             <div class="form-group flex-1">
-              <label>自定义后缀 <span class="opt">（可选）</span></label>
+              <label for="custom-slug">自定义后缀 <span class="optional">（可选）</span></label>
               <div class="input-with-prefix">
                 <span class="input-prefix">/s/</span>
-                <input type="text" id="custom-slug" placeholder="my-link" pattern="[a-zA-Z0-9_-]+">
+                <input type="text" id="custom-slug" placeholder="my-link">
               </div>
             </div>
             <div class="form-group flex-1">
-              <label>标题 <span class="opt">（可选）</span></label>
+              <label for="page-title">标题 <span class="optional">（可选）</span></label>
               <input type="text" id="page-title" placeholder="给链接起个名字">
             </div>
           </div>
@@ -52,43 +51,32 @@
         </div>
       </div>
     </section>
-
     <section id="tab-manage" class="tab-content">
       <div class="card">
         <div class="card-header-row">
           <h2 class="card-title"><i class="ph ph-list"></i> 所有短链接</h2>
           <button class="btn btn-secondary btn-sm" id="refresh-btn"><i class="ph ph-arrow-clockwise"></i> 刷新</button>
         </div>
-        <div id="links-list" class="links-list"></div>
-        <div id="no-links" class="empty-state hidden">
-          <i class="ph ph-link-break"></i><p>暂无短链接，请在「创建」页面添加</p>
-        </div>
+        <div id="links-list" class="links-list"><div class="loading"><i class="ph ph-spinner"></i> 加载中...</div></div>
+        <div id="no-links" class="empty-state hidden"><i class="ph ph-link-break"></i><p>暂无短链接，请在「创建」页面添加</p></div>
       </div>
     </section>
-
     <section id="tab-validate" class="tab-content">
       <div class="card">
         <h2 class="card-title"><i class="ph ph-magnifying-glass"></i> 检测网址有效性</h2>
-        <p class="card-desc"><i class="ph ph-info"></i> 输入网址后，系统会通过 DNS 解析和 HEAD 请求来检测该网址是否有效，不会下载页面内容，确保安全。</p>
+        <p class="card-desc"><i class="ph ph-info"></i> 输入网址后，系统通过 DNS 解析和 HEAD 请求检测该网址是否有效，不下载页面内容。</p>
         <form id="validate-form">
           <div class="form-group">
-            <label>要检测的网址</label>
+            <label for="validate-url">要检测的网址</label>
             <input type="url" id="validate-url" placeholder="https://example.com" required>
           </div>
           <button type="submit" class="btn btn-primary btn-full"><i class="ph ph-magnifying-glass"></i> 开始检测</button>
         </form>
         <div id="validate-result" class="result-box hidden"></div>
       </div>
-      <div class="card">
-        <h2 class="card-title"><i class="ph ph-arrow-square-out"></i> 检测已有短链接</h2>
-        <p class="card-desc"><i class="ph ph-info"></i> 在「管理」页面点击「检测」按钮，即可检查该短链接的目标网址是否有效。</p>
-      </div>
     </section>
   </main>
-
-  <footer class="footer">
-    <div class="container"><i class="ph ph-shield-check"></i> 短链接服务 - 安全、快速、无追踪</div>
-  </footer>
+  <footer class="footer"><div class="container"><i class="ph ph-shield-check"></i> 短链接服务 - 安全、快速、无追踪</div></footer>
   <script src="app.js"></script>
 </body>
 </html>

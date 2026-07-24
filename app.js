@@ -1,23 +1,23 @@
 // 标签页切换
-document.querySelectorAll('.nav-tab').forEach(tab => {
+const navTabs = document.querySelectorAll('.nav-tab');
+const tabContents = document.querySelectorAll('.tab-content');
+navTabs.forEach(tab => {
   tab.addEventListener('click', () => {
-    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    navTabs.forEach(t => t.classList.remove('active'));
+    tabContents.forEach(c => c.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
   });
 });
 
 // 工具
-function esc(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-function fmtDate(s) { if (!s) return ''; return new Date(s).toLocaleDateString('zh-CN', { month:'short', day:'numeric', year:'numeric' }); }
-function copyText(t) {
-  if (navigator.clipboard && navigator.clipboard.writeText)
-    return navigator.clipboard.writeText(t).then(() => true).catch(() => false);
-  const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;left:-9999px';
-  document.body.appendChild(a); a.select();
-  try { document.execCommand('copy'); document.body.removeChild(a); return Promise.resolve(true); }
-  catch(e) { document.body.removeChild(a); return Promise.resolve(false); }
+function escapeHtml(s) { if (!s) return ''; const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+function formatDate(s) { if (!s) return ''; return new Date(s).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', year: 'numeric' }); }
+function copyToClipboard(t) {
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(t).then(() => true).catch(() => false);
+  const ta = document.createElement('textarea'); ta.value = t; ta.style.cssText = 'position:fixed;left:-9999px';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); document.body.removeChild(ta); return Promise.resolve(true); } catch(e) { document.body.removeChild(ta); return Promise.resolve(false); }
 }
 
 // 创建
@@ -33,10 +33,7 @@ createForm.addEventListener('submit', async e => {
   const title = document.getElementById('page-title').value.trim();
   if (!url) return;
   try {
-    const r = await fetch('/api/links', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, slug: slug || undefined, title: title || undefined })
-    });
+    const r = await fetch('api.php/links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, slug: slug || undefined, title: title || undefined }) });
     const d = await r.json();
     if (!r.ok) { alert(d.error || '创建失败'); return; }
     resultUrl.textContent = d.shortUrl;
@@ -45,91 +42,93 @@ createForm.addEventListener('submit', async e => {
     document.getElementById('custom-slug').value = '';
     document.getElementById('page-title').value = '';
     loadLinks();
-  } catch(e) { alert('网络错误：' + e.message); }
+  } catch (err) { alert('网络错误：' + err.message); }
 });
 
 copyBtn.addEventListener('click', () => {
-  const u = resultUrl.textContent; if (!u) return;
-  copyText(u).then(ok => { if (ok) { copyBtn.innerHTML = '<i class="ph ph-check"></i> 已复制'; setTimeout(() => { copyBtn.innerHTML = '<i class="ph ph-copy"></i> 复制'; }, 2000); } });
+  const u = resultUrl.textContent;
+  if (!u) return;
+  copyToClipboard(u).then(ok => { if (ok) { copyBtn.innerHTML = '<i class="ph ph-check"></i> 已复制'; setTimeout(() => { copyBtn.innerHTML = '<i class="ph ph-copy"></i> 复制'; }, 2000); } });
 });
 
 // 管理
 const linksList = document.getElementById('links-list');
 const noLinks = document.getElementById('no-links');
-let cached = [];
+const refreshBtn = document.getElementById('refresh-btn');
+let cachedLinks = [];
 
 async function loadLinks() {
   try {
-    const r = await fetch('/api/links');
+    const r = await fetch('api.php/links');
     const links = await r.json();
-    cached = links;
-    if (!links.length) { linksList.innerHTML = ''; noLinks.classList.remove('hidden'); return; }
+    cachedLinks = links;
+    if (links.length === 0) { linksList.innerHTML = ''; noLinks.classList.remove('hidden'); return; }
     noLinks.classList.add('hidden');
     linksList.innerHTML = links.map((l, i) => `
-      <div class="link-item">
+      <div class="link-item" data-index="${i}">
         <div class="link-header">
-          <span class="link-slug"><a href="/s/${esc(l.slug)}" target="_blank">/s/${esc(l.slug)}</a></span>
+          <span class="link-slug"><a href="s.php?slug=${escapeHtml(l.slug)}" target="_blank">/s/${escapeHtml(l.slug)}</a></span>
           <div class="link-actions">
-            <button class="btn btn-secondary btn-sm" data-act="copy" data-i="${i}"><i class="ph ph-copy"></i> 复制</button>
-            <button class="btn btn-secondary btn-sm" data-act="validate" data-i="${i}"><i class="ph ph-magnifying-glass"></i> 检测</button>
-            <button class="btn btn-danger btn-sm" data-act="delete" data-i="${i}"><i class="ph ph-trash"></i> 删除</button>
+            <button class="btn btn-secondary btn-sm" data-action="copy" data-index="${i}"><i class="ph ph-copy"></i> 复制</button>
+            <button class="btn btn-secondary btn-sm" data-action="validate" data-index="${i}"><i class="ph ph-magnifying-glass"></i> 检测</button>
+            <button class="btn btn-danger btn-sm" data-action="delete" data-index="${i}"><i class="ph ph-trash"></i> 删除</button>
           </div>
         </div>
-        <div class="link-original"><a href="${esc(l.original_url)}" target="_blank">${esc(l.original_url)}</a></div>
+        <div class="link-original"><a href="${escapeHtml(l.original_url)}" target="_blank">${escapeHtml(l.original_url)}</a></div>
         <div class="link-meta">
           <span><i class="ph ph-eye"></i> ${l.visit_count} 次访问</span>
-          <span><i class="ph ph-calendar"></i> ${fmtDate(l.created_at)}</span>
+          <span><i class="ph ph-calendar"></i> ${formatDate(l.created_at)}</span>
         </div>
       </div>`).join('');
-  } catch(e) { linksList.innerHTML = '<div class="empty-state"><i class="ph ph-warning-circle"></i> 加载失败</div>'; }
+  } catch (err) { linksList.innerHTML = '<div class="empty-state"><i class="ph ph-warning-circle"></i> 加载失败</div>'; }
 }
 
 linksList.addEventListener('click', async e => {
-  const btn = e.target.closest('[data-act]');
+  const btn = e.target.closest('[data-action]');
   if (!btn) return;
-  const act = btn.dataset.act, i = +btn.dataset.i, l = cached[i];
-  if (!l) return;
-  if (act === 'copy') {
-    copyText(window.location.origin + '/s/' + l.slug).then(ok => {
-      if (ok) { const o = btn.innerHTML; btn.innerHTML = '<i class="ph ph-check"></i> 已复制'; setTimeout(() => btn.innerHTML = o, 1500); }
+  const action = btn.dataset.action;
+  const link = cachedLinks[parseInt(btn.dataset.index)];
+  if (!link) return;
+
+  if (action === 'copy') {
+    copyToClipboard(window.location.origin + '/s/' + link.slug).then(ok => {
+      if (ok) { const o = btn.innerHTML; btn.innerHTML = '<i class="ph ph-check"></i> 已复制'; setTimeout(() => { btn.innerHTML = o; }, 1500); }
     });
   }
-  if (act === 'validate') {
-    document.getElementById('validate-url').value = l.original_url;
-    document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  if (action === 'validate') {
+    document.getElementById('validate-url').value = link.original_url;
+    navTabs.forEach(t => t.classList.remove('active')); tabContents.forEach(c => c.classList.remove('active'));
     document.querySelector('[data-tab="validate"]').classList.add('active');
     document.getElementById('tab-validate').classList.add('active');
-    document.getElementById('validate-form').dispatchEvent(new Event('submit'));
+    validateForm.dispatchEvent(new Event('submit'));
   }
-  if (act === 'delete') {
+  if (action === 'delete') {
     if (!confirm('确定要删除这条短链接吗？')) return;
-    await fetch('/api/links/' + encodeURIComponent(l.slug), { method: 'DELETE' });
-    loadLinks();
+    try { await fetch('api.php/links/' + encodeURIComponent(link.slug), { method: 'DELETE' }); loadLinks(); } catch (err) { alert('删除失败'); }
   }
 });
 
-document.getElementById('refresh-btn').addEventListener('click', loadLinks);
+refreshBtn.addEventListener('click', loadLinks);
 
 // 检测
-const vForm = document.getElementById('validate-form');
-const vResult = document.getElementById('validate-result');
+const validateForm = document.getElementById('validate-form');
+const validateResult = document.getElementById('validate-result');
 
-vForm.addEventListener('submit', async e => {
+validateForm.addEventListener('submit', async e => {
   e.preventDefault();
   const url = document.getElementById('validate-url').value.trim();
   if (!url) return;
-  vResult.classList.remove('hidden');
-  vResult.innerHTML = '<div class="validate-status" style="border-left-color:var(--ac)"><div class="st" style="color:var(--ac)"><i class="ph ph-spinner"></i> 检测中...</div><div class="sd">正在解析 DNS 并发送 HEAD 请求...</div></div>';
+  validateResult.classList.remove('hidden');
+  validateResult.innerHTML = '<div class="validate-status" style="border-left-color:var(--accent)"><div class="status-title" style="color:var(--accent)"><i class="ph ph-spinner"></i> 检测中...</div><div class="status-detail">正在解析 DNS 并发送 HEAD 请求...</div></div>';
   try {
-    const r = await fetch('/api/validate-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
+    const r = await fetch('api.php/validate-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
     const d = await r.json();
-    if (d.error) { vResult.innerHTML = `<div class="validate-status invalid"><div class="st"><i class="ph ph-x-circle"></i> 错误</div><div class="sd">${esc(d.error)}</div></div>`; return; }
-    const ic = d.valid ? 'ph-check-circle' : 'ph-x-circle';
+    if (d.error) { validateResult.innerHTML = `<div class="validate-status invalid"><div class="status-title"><i class="ph ph-x-circle"></i> 错误</div><div class="status-detail">${escapeHtml(d.error)}</div></div>`; return; }
+    const icon = d.valid ? 'ph-check-circle' : 'ph-x-circle';
     const cls = d.valid ? 'valid' : 'invalid';
-    const lb = d.valid ? '有效' : '无效';
-    vResult.innerHTML = `<div class="validate-status ${cls}"><div class="st"><i class="ph ${ic}"></i> ${lb} - ${esc(d.reason)}</div>${d.status ? `<div class="sd">HTTP 状态码: ${d.status}</div>` : ''}<div class="sd">${esc(d.details)}</div></div>`;
-  } catch(e) { vResult.innerHTML = `<div class="validate-status invalid"><div class="st"><i class="ph ph-warning-circle"></i> 网络错误</div><div class="sd">${esc(e.message)}</div></div>`; }
+    const label = d.valid ? '有效' : '无效';
+    validateResult.innerHTML = `<div class="validate-status ${cls}"><div class="status-title"><i class="ph ${icon}"></i> ${label} - ${escapeHtml(d.reason)}</div>${d.status ? `<div class="status-detail">HTTP 状态码: ${d.status}</div>` : ''}<div class="status-detail">${escapeHtml(d.details)}</div></div>`;
+  } catch (err) { validateResult.innerHTML = `<div class="validate-status invalid"><div class="status-title"><i class="ph ph-warning-circle"></i> 网络错误</div><div class="status-detail">${escapeHtml(err.message)}</div></div>`; }
 });
 
 loadLinks();
