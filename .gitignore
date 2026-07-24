@@ -1,0 +1,5 @@
+node_modules/
+shortlinks.db
+shortlinks.db-shm
+shortlinks.db-wal
+.env

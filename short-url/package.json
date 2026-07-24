@@ -1,0 +1,17 @@
+{
+  "name": "short-url-service",
+  "version": "1.0.0",
+  "description": "Web-based short URL service with link validation",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "better-sqlite3": "^9.4.3",
+    "node-fetch": "^2.7.0",
+    "nanoid": "^3.3.7",
+    "dns2": "^2.1.0"
+  }
+}
