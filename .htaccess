@@ -1,0 +1,12 @@
+RewriteEngine On
+RewriteBase /
+
+# 短链接跳转: /s/xxx -> s.php?slug=xxx
+RewriteRule ^s/(.+)$ s.php?slug=$1 [L,QSA]
+
+# API 路由: /api/xxx -> api.php/xxx
+RewriteRule ^api/(.+)$ api.php/$1 [L,QSA]
+RewriteRule ^api$ api.php [L,QSA]
+
+# 默认页面
+RewriteRule ^$ index.php [L]
