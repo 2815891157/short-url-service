@@ -7,3 +7,6 @@ RewriteRule ^s/(.+)$ s.php?slug=$1 [L,QSA]
 # API: /api/xxx -> api.php/xxx
 RewriteRule ^api/(.+)$ api.php/$1 [L,QSA]
 RewriteRule ^api$ api.php [L]
+
+# 默认入口
+DirectoryIndex index.php
