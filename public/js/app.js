@@ -11,6 +11,51 @@ navTabs.forEach(tab => {
   });
 });
 
+// ============ 工具函数 ============
+function escapeAttr(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeHtml(str) {
+  if (!str) return '';
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    return navigator.clipboard.writeText(text).then(() => true).catch(() => false);
+  }
+  // 降级方案
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.left = '-9999px';
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    return Promise.resolve(true);
+  } catch (e) {
+    document.body.removeChild(ta);
+    return Promise.resolve(false);
+  }
+}
+
 // ============ 创建短链接 ============
 const createForm = document.getElementById('create-form');
 const createResult = document.getElementById('create-result');
@@ -30,7 +75,7 @@ createForm.addEventListener('submit', async (e) => {
     const resp = await fetch('/api/links', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, slug, title })
+      body: JSON.stringify({ url, slug: slug || undefined, title: title || undefined })
     });
 
     const data = await resp.json();
@@ -55,11 +100,12 @@ createForm.addEventListener('submit', async (e) => {
 
 copyBtn.addEventListener('click', () => {
   const url = resultUrl.textContent;
-  navigator.clipboard.writeText(url).then(() => {
-    copyBtn.innerHTML = '<i class="ph ph-check"></i> 已复制';
-    setTimeout(() => {
-      copyBtn.innerHTML = '<i class="ph ph-copy"></i> 复制';
-    }, 2000);
+  if (!url) return;
+  copyToClipboard(url).then(ok => {
+    if (ok) {
+      copyBtn.innerHTML = '<i class="ph ph-check"></i> 已复制';
+      setTimeout(() => { copyBtn.innerHTML = '<i class="ph ph-copy"></i> 复制'; }, 2000);
+    }
   });
 });
 
@@ -68,10 +114,15 @@ const linksList = document.getElementById('links-list');
 const noLinks = document.getElementById('no-links');
 const refreshBtn = document.getElementById('refresh-btn');
 
+// 存储链接数据，用于事件委托
+let cachedLinks = [];
+
 async function loadLinks() {
   try {
     const resp = await fetch('/api/links');
     const links = await resp.json();
+
+    cachedLinks = links;
 
     if (links.length === 0) {
       linksList.innerHTML = '';
@@ -81,20 +132,20 @@ async function loadLinks() {
 
     noLinks.classList.add('hidden');
 
-    linksList.innerHTML = links.map(link => `
-      <div class="link-item">
+    linksList.innerHTML = links.map((link, i) => `
+      <div class="link-item" data-index="${i}">
         <div class="link-header">
           <span class="link-slug">
             <a href="/s/${escapeHtml(link.slug)}" target="_blank">/s/${escapeHtml(link.slug)}</a>
           </span>
           <div class="link-actions">
-            <button class="btn btn-secondary btn-sm" onclick="copyShortUrl('${escapeHtml(link.slug)}')">
+            <button class="btn btn-secondary btn-sm" data-action="copy" data-index="${i}">
               <i class="ph ph-copy"></i> 复制
             </button>
-            <button class="btn btn-secondary btn-sm" onclick="validateExisting('${escapeHtml(link.original_url)}')">
+            <button class="btn btn-secondary btn-sm" data-action="validate" data-index="${i}">
               <i class="ph ph-magnifying-glass"></i> 检测
             </button>
-            <button class="btn btn-danger btn-sm" onclick="deleteLink('${escapeHtml(link.slug)}')">
+            <button class="btn btn-danger btn-sm" data-action="delete" data-index="${i}">
               <i class="ph ph-trash"></i> 删除
             </button>
           </div>
@@ -109,25 +160,50 @@ async function loadLinks() {
       </div>
     `).join('');
   } catch (err) {
-    linksList.innerHTML = `<div class="empty-state"><i class="ph ph-warning-circle"></i> 加载失败</div>`;
+    linksList.innerHTML = '<div class="empty-state"><i class="ph ph-warning-circle"></i> 加载失败</div>';
   }
 }
 
-function copyShortUrl(slug) {
-  const url = window.location.origin + '/s/' + slug;
-  navigator.clipboard.writeText(url);
-}
+// 事件委托 —— 替代 inline onclick，防止 XSS
+linksList.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-action]');
+  if (!btn) return;
 
-async function deleteLink(slug) {
-  if (!confirm('确定要删除这条短链接吗？')) return;
+  const action = btn.dataset.action;
+  const index = parseInt(btn.dataset.index, 10);
+  const link = cachedLinks[index];
+  if (!link) return;
 
-  try {
-    await fetch('/api/links/' + slug, { method: 'DELETE' });
-    loadLinks();
-  } catch (err) {
-    alert('删除失败');
+  if (action === 'copy') {
+    const fullUrl = window.location.origin + '/s/' + link.slug;
+    copyToClipboard(fullUrl).then(ok => {
+      if (ok) {
+        const original = btn.innerHTML;
+        btn.innerHTML = '<i class="ph ph-check"></i> 已复制';
+        setTimeout(() => { btn.innerHTML = original; }, 1500);
+      }
+    });
   }
-}
+
+  if (action === 'validate') {
+    document.getElementById('validate-url').value = link.original_url;
+    navTabs.forEach(t => t.classList.remove('active'));
+    tabContents.forEach(c => c.classList.remove('active'));
+    document.querySelector('[data-tab="validate"]').classList.add('active');
+    document.getElementById('tab-validate').classList.add('active');
+    validateForm.dispatchEvent(new Event('submit'));
+  }
+
+  if (action === 'delete') {
+    if (!confirm('确定要删除这条短链接吗？')) return;
+    try {
+      await fetch('/api/links/' + encodeURIComponent(link.slug), { method: 'DELETE' });
+      loadLinks();
+    } catch (err) {
+      alert('删除失败');
+    }
+  }
+});
 
 refreshBtn.addEventListener('click', loadLinks);
 
@@ -144,7 +220,7 @@ validateForm.addEventListener('submit', async (e) => {
   validateResult.innerHTML = `
     <div class="validate-status" style="border-left-color: var(--accent);">
       <div class="status-title" style="color: var(--accent);">
-        <i class="ph ph-spinner" style="animation: spin 1s linear infinite;"></i> 检测中...
+        <i class="ph ph-spinner"></i> 检测中...
       </div>
       <div class="status-detail">正在解析 DNS 并发送 HEAD 请求...</div>
     </div>
@@ -189,29 +265,6 @@ validateForm.addEventListener('submit', async (e) => {
     `;
   }
 });
-
-function validateExisting(url) {
-  document.getElementById('validate-url').value = url;
-  navTabs.forEach(t => t.classList.remove('active'));
-  tabContents.forEach(c => c.classList.remove('active'));
-  document.querySelector('[data-tab="validate"]').classList.add('active');
-  document.getElementById('tab-validate').classList.add('active');
-  validateForm.dispatchEvent(new Event('submit'));
-}
-
-// ============ 工具函数 ============
-function escapeHtml(str) {
-  if (!str) return '';
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', year: 'numeric' });
-}
 
 // ============ 初始化 ============
 loadLinks();

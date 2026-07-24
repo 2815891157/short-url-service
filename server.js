@@ -23,7 +23,7 @@ db.exec(`
   )
 `);
 
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // 创建短链接
@@ -41,22 +41,28 @@ app.post('/api/links', (req, res) => {
       return res.status(400).json({ error: '网址格式不正确' });
     }
 
+    if (!['http:', 'https:'].includes(new URL(url).protocol)) {
+      return res.status(400).json({ error: '仅支持 http 和 https 协议' });
+    }
+
     if (slug) {
-      const existing = db.prepare('SELECT id FROM links WHERE slug = ?').get(slug);
-      if (existing) {
-        return res.status(400).json({ error: '该自定义后缀已被占用' });
+      if (slug.length > 32) {
+        return res.status(400).json({ error: '后缀不能超过 32 个字符' });
       }
       if (!/^[a-zA-Z0-9_-]+$/.test(slug)) {
         return res.status(400).json({ error: '后缀只能包含字母、数字、下划线和连字符' });
+      }
+      const existing = db.prepare('SELECT id FROM links WHERE slug = ?').get(slug);
+      if (existing) {
+        return res.status(400).json({ error: '该自定义后缀已被占用' });
       }
     } else {
       slug = nanoid(7);
     }
 
-    const stmt = db.prepare(
+    const result = db.prepare(
       'INSERT INTO links (slug, original_url, title) VALUES (?, ?, ?)'
-    );
-    const result = stmt.run(slug, url, title || '');
+    ).run(slug, url, title || '');
 
     res.json({
       id: result.lastInsertRowid,
@@ -80,19 +86,6 @@ app.get('/api/links', (req, res) => {
   }
 });
 
-// 获取单个短链接
-app.get('/api/links/:slug', (req, res) => {
-  try {
-    const link = db.prepare('SELECT * FROM links WHERE slug = ?').get(req.params.slug);
-    if (!link) {
-      return res.status(404).json({ error: '链接不存在' });
-    }
-    res.json(link);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 // 删除短链接
 app.delete('/api/links/:slug', (req, res) => {
   try {
@@ -106,7 +99,7 @@ app.delete('/api/links/:slug', (req, res) => {
   }
 });
 
-// 安全检测网址（不真实下载页面）
+// 检测网址有效性（SSRF 防护 + 安全 HEAD 请求）
 app.post('/api/validate-url', async (req, res) => {
   try {
     const { url } = req.body;
@@ -135,9 +128,31 @@ app.post('/api/validate-url', async (req, res) => {
       });
     }
 
-    // 第一步：DNS 解析（安全，无网络请求）
+    // SSRF 防护：禁止检测内网地址
+    const hostname = parsedUrl.hostname;
+    const isPrivate = await new Promise((resolve) => {
+      dns.lookup(hostname, (err, address) => {
+        if (err) return resolve(false);  // DNS fail -> not private, will be caught below
+        // 127.x.x.x, 10.x.x.x, 172.16-31.x.x, 192.168.x.x, 0.0.0.0, 169.254.x.x
+        if (/^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|0\.0\.0\.0|169\.254\.|::1|fc|fd|fe80)/.test(address)) {
+          return resolve(true);
+        }
+        resolve(false);
+      });
+    });
+
+    if (isPrivate) {
+      return res.json({
+        valid: false,
+        reason: '禁止检测内网地址',
+        status: null,
+        details: '出于安全考虑，不允许检测内网或本地地址'
+      });
+    }
+
+    // DNS 解析
     const dnsCheck = await new Promise((resolve) => {
-      dns.lookup(parsedUrl.hostname, (err, address) => {
+      dns.lookup(hostname, (err, address) => {
         if (err) {
           resolve({ ok: false, error: err.message });
         } else {
@@ -151,11 +166,11 @@ app.post('/api/validate-url', async (req, res) => {
         valid: false,
         reason: '域名不存在',
         status: null,
-        details: `DNS 解析失败：${parsedUrl.hostname} — ${dnsCheck.error}。该域名可能不存在或 DNS 未配置。`
+        details: `DNS 解析失败：${hostname} — ${dnsCheck.error}。该域名可能不存在或 DNS 未配置。`
       });
     }
 
-    // 第二步：HEAD 请求（安全，仅获取响应头，不下载页面内容）
+    // HEAD 请求
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 8000);
@@ -186,9 +201,9 @@ app.post('/api/validate-url', async (req, res) => {
 
       if (fetchErr.name === 'AbortError') {
         reason = '请求超时';
-        details = `域名 ${parsedUrl.hostname} 已解析到 ${dnsCheck.address}，但服务器在 8 秒内未响应。`;
+        details = `域名 ${hostname} 已解析到 ${dnsCheck.address}，但服务器在 8 秒内未响应。`;
       } else {
-        details = `域名 ${parsedUrl.hostname} 已解析到 ${dnsCheck.address}，但连接失败：${fetchErr.message}`;
+        details = `域名 ${hostname} 已解析到 ${dnsCheck.address}，但连接失败：${fetchErr.message}`;
       }
 
       res.json({ valid: false, reason, status: null, details });
@@ -198,10 +213,10 @@ app.post('/api/validate-url', async (req, res) => {
   }
 });
 
-// 短链接跳转 —— 直接 302，没有任何中间页面
+// 短链接跳转 —— 直接 302
 app.get('/s/:slug', (req, res) => {
   try {
-    const link = db.prepare('SELECT * FROM links WHERE slug = ?').get(req.params.slug);
+    const link = db.prepare('SELECT original_url FROM links WHERE slug = ?').get(req.params.slug);
     if (!link) {
       return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
     }
@@ -210,6 +225,14 @@ app.get('/s/:slug', (req, res) => {
   } catch (err) {
     res.status(500).send('服务器内部错误');
   }
+});
+
+// SPA fallback —— 非 API、非 /s/ 的请求都返回 index.html
+app.get('*', (req, res) => {
+  if (req.path.startsWith('/api/') || req.path.startsWith('/s/')) {
+    return res.status(404).json({ error: '接口不存在' });
+  }
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
 app.listen(PORT, () => {
