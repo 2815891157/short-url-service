@@ -4,7 +4,13 @@ require_once __DIR__ . '/store.php';
 // API 来源校验 — 只允许本站页面发起的请求
 $origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? '';
 $site_host = $_SERVER['HTTP_HOST'] ?? '';
-if ($origin === '' || !str_contains($origin, $site_host)) {
+if ($origin === '') {
+    http_response_code(403);
+    echo json_encode(['error' => '非法请求'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+$origin_host = parse_url($origin, PHP_URL_HOST) ?? '';
+if ($origin_host !== $site_host) {
     http_response_code(403);
     echo json_encode(['error' => '非法请求'], JSON_UNESCAPED_UNICODE);
     exit;
@@ -27,9 +33,6 @@ $body = $is_json ? (json_decode(file_get_contents('php://input'), true) ?: []) :
 
 // ---- 创建短链接 ----
 if ($path === '/links' && $method === 'POST') {
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    rate_limit('create:' . $ip, 100, 86400);
-
     $url = trim($body['url'] ?? '');
     if ($url === '') json_out(['error' => '请输入目标网址'], 400);
     if (strlen($url) < 15) json_out(['error' => '网址太短'], 400);
@@ -62,9 +65,6 @@ if ($path === '/links' && $method === 'POST') {
 
 // ---- 检测网址 ----
 } elseif ($path === '/validate-url' && $method === 'POST') {
-    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    rate_limit('validate:' . $ip, 5, 60);
-
     $url = trim($body['url'] ?? '');
     if ($url === '') json_out(['error' => '请输入网址'], 400);
     $parsed = parse_url($url);

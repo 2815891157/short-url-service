@@ -4,12 +4,6 @@ require_once __DIR__ . '/store.php';
 $slug = $_GET['slug'] ?? '';
 if ($slug === '') { header('Location: /'); exit; }
 
-// $_GET 已自动解码，不再重复 urldecode
-
-$ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-rate_limit('redirect:' . $ip, 60, 60);
-
-// 合并为一次文件操作：打开→加锁→读→查→改→写→关
 $fp = fopen(DATA_FILE, 'c');
 if (!$fp) { header('Location: /'); exit; }
 flock($fp, LOCK_EX);
