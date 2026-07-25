@@ -24,30 +24,21 @@ if ($path === '/links' && $method === 'POST') {
     rate_limit('create:' . $ip, 10, 60);
 
     $url = trim($body['url'] ?? '');
-    $slug = trim($body['slug'] ?? '');
-    $title = trim($body['title'] ?? '');
     if ($url === '') json_out(['error' => '请输入目标网址'], 400);
     $parsed = parse_url($url);
     if (!$parsed || !in_array($parsed['scheme'] ?? '', ['http', 'https'])) json_out(['error' => '仅支持 http/https'], 400);
 
     $links = load_data();
-
-    if ($slug !== '') {
-        if (strlen($slug) > 32) json_out(['error' => '后缀不能超过 32 字符'], 400);
-        if (!preg_match('/^[a-zA-Z0-9]+$/', $slug)) json_out(['error' => '后缀只能包含字母和数字'], 400);
-        foreach ($links as $l) { if ($l['slug'] === $slug) json_out(['error' => '后缀已被占用'], 400); }
-    } else {
-        for ($i = 0; $i < 20; $i++) {
-            $slug = nanoid();
-            $exists = false;
-            foreach ($links as $l) { if ($l['slug'] === $slug) { $exists = true; break; } }
-            if (!$exists) break;
-        }
+    for ($i = 0; $i < 20; $i++) {
+        $slug = nanoid();
+        $exists = false;
+        foreach ($links as $l) { if ($l['slug'] === $slug) { $exists = true; break; } }
+        if (!$exists) break;
     }
 
     $new = [
         'id' => count($links) > 0 ? max(array_column($links, 'id')) + 1 : 1,
-        'slug' => $slug, 'original_url' => $url, 'title' => $title,
+        'slug' => $slug, 'original_url' => $url,
         'created_at' => date('Y-m-d H:i:s'), 'visit_count' => 0
     ];
     $links[] = $new;
@@ -55,7 +46,7 @@ if ($path === '/links' && $method === 'POST') {
 
     $host = $_SERVER['HTTP_HOST'] ?? '';
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    json_out(['id' => $new['id'], 'slug' => $slug, 'shortUrl' => $scheme . '://' . $host . '/s/' . $slug, 'originalUrl' => $url, 'title' => $title]);
+    json_out(['id' => $new['id'], 'slug' => $slug, 'shortUrl' => $scheme . '://' . $host . '/s/' . $slug, 'originalUrl' => $url]);
 
 // ---- 检测网址 ----
 } elseif ($path === '/validate-url' && $method === 'POST') {

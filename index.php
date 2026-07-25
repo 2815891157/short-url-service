@@ -24,19 +24,6 @@
           <label for="original-url">目标网址 <span class="required">*</span></label>
           <input type="url" id="original-url" placeholder="https://example.com/your-long-url" required>
         </div>
-        <div class="form-row">
-          <div class="form-group flex-1">
-            <label for="custom-slug">自定义后缀 <span class="optional">（可选）</span></label>
-            <div class="input-with-prefix">
-              <span class="input-prefix">/s/</span>
-              <input type="text" id="custom-slug" placeholder="my-link">
-            </div>
-          </div>
-          <div class="form-group flex-1">
-            <label for="page-title">标题 <span class="optional">（可选）</span></label>
-            <input type="text" id="page-title" placeholder="给链接起个名字">
-          </div>
-        </div>
         <button type="submit" class="btn btn-primary btn-full"><i class="ph ph-magic-wand"></i> 生成短链接</button>
       </form>
       <div id="create-result" class="result-box hidden">
@@ -58,24 +45,20 @@
   createForm.addEventListener('submit', async e => {
     e.preventDefault();
     const url = document.getElementById('original-url').value.trim();
-    const slug = document.getElementById('custom-slug').value.trim();
-    const title = document.getElementById('page-title').value.trim();
     if (!url) return;
     try {
-      const r = await fetch('api.php/links', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url, slug: slug||undefined, title: title||undefined}) });
+      const r = await fetch('api.php/links', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url}) });
       if (!r.ok) {
         const t = await r.text();
         try { const j = JSON.parse(t); alert(j.error || '创建失败'); }
-        catch { alert('服务器错误，请稍后再试'); }
+        catch { alert('服务器错误'); }
         return;
       }
       const d = await r.json();
       resultUrl.textContent = d.shortUrl;
       createResult.classList.remove('hidden');
       document.getElementById('original-url').value = '';
-      document.getElementById('custom-slug').value = '';
-      document.getElementById('page-title').value = '';
-    } catch(e) { alert('网络连接失败，请检查网络'); }
+    } catch(e) { alert('网络连接失败'); }
   });
 
   copyBtn.addEventListener('click', () => {

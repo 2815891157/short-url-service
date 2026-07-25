@@ -23,20 +23,14 @@ function save_data($d) {
 }
 
 $flash = '';
-$error = '';
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $act = $_POST['action'] ?? '';
-
-    if ($act === 'delete') {
-        $id = (int)($_POST['id'] ?? 0);
-        $links = load_data();
-        $links = array_values(array_filter($links, fn($l) => $l['id'] !== $id));
-        save_data($links);
-        $flash = '删除成功';
-    }
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delete') {
+    $id = (int)($_POST['id'] ?? 0);
+    $links = load_data();
+    $links = array_values(array_filter($links, fn($l) => $l['id'] !== $id));
+    save_data($links);
+    $flash = '删除成功';
 }
-
+if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') $flash = '删除成功';
 
 $links = load_data();
 usort($links, fn($a, $b) => strtotime($b['created_at']) - strtotime($a['created_at']));
@@ -66,7 +60,7 @@ th,td{padding:10px 12px;border-bottom:1px solid #2d3142;text-align:left;font-siz
 th{background:#242836;font-weight:600;color:#8b8fa3}
 td{color:#e4e6ef}
 .slug{color:#4f7df7;font-family:monospace;font-weight:600}
-.url{color:#8b8fa3;word-break:break-all;max-width:300px}
+.url{color:#8b8fa3;word-break:break-all;max-width:400px}
 .meta{color:#5c6073;font-size:.78rem}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
 .empty{text-align:center;padding:40px;color:#5c6073}
@@ -92,13 +86,12 @@ a:hover{text-decoration:underline}
 <div class="empty"><i class="ph ph-link-break" style="font-size:2rem;display:block;margin-bottom:8px"></i>暂无短链接</div>
 <?php else: ?>
 <table>
-<thead><tr><th>短链接</th><th>目标网址</th><th>标题</th><th>访问</th><th>创建时间</th><th></th></tr></thead>
+<thead><tr><th>短链接</th><th>目标网址</th><th>访问</th><th>创建时间</th><th></th></tr></thead>
 <tbody>
 <?php foreach ($links as $l): ?>
 <tr>
   <td class="slug">/s/<?= htmlspecialchars($l['slug']) ?></td>
   <td class="url"><a href="<?= htmlspecialchars($l['original_url']) ?>" target="_blank"><?= htmlspecialchars($l['original_url']) ?></a></td>
-  <td><?= htmlspecialchars($l['title'] ?: '-') ?></td>
   <td class="meta"><?= $l['visit_count'] ?></td>
   <td class="meta"><?= $l['created_at'] ?></td>
   <td>
