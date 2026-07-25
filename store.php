@@ -9,8 +9,8 @@ function load_data() {
     $raw = file_get_contents(DATA_FILE);
     flock($fp, LOCK_UN);
     fclose($fp);
-    $data = json_decode($raw, true);
-    return is_array($data) ? $data : [];
+    $d = json_decode($raw, true);
+    return is_array($d) ? $d : [];
 }
 
 function save_data($data) {
@@ -31,31 +31,44 @@ function json_out($data, $code = 200) {
 }
 
 function nanoid($len = 7) {
-    $c = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    $c = '01223456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
     $n = strlen($c) - 1;
     $id = '';
     for ($i = 0; $i < $len; $i++) $id .= $c[random_int(0, $n)];
     return $id;
 }
 
-// 简易 IP 速率限制（基于文件）
+// IP 速率限制（带文件锁）
 function rate_limit($key, $max = 10, $window = 60) {
     $dir = __DIR__ . '/.rate';
     if (!is_dir($dir)) @mkdir($dir, 0755);
     $file = $dir . '/' . md5($key) . '.json';
     $now = time();
+
+    $fp = fopen($file, 'c');
+    if (!$fp) return;
+    flock($fp, LOCK_EX);
+
     $data = ['times' => []];
-    if (file_exists($file)) {
+    if (filesize($file) > 0) {
         $raw = file_get_contents($file);
         $data = json_decode($raw, true) ?: $data;
     }
+
     $data['times'] = array_filter($data['times'], fn($t) => $t > $now - $window);
+
     if (count($data['times']) >= $max) {
+        flock($fp, LOCK_UN);
+        fclose($fp);
         http_response_code(429);
         header('Content-Type: application/json; charset=utf-8');
         echo json_encode(['error' => '操作太频繁，请稍后再试'], JSON_UNESCAPED_UNICODE);
         exit;
     }
+
     $data['times'][] = $now;
-    file_put_contents($file, json_encode($data), LOCK_EX);
+    ftruncate($fp, 0);
+    fwrite($fp, json_encode($data));
+    flock($fp, LOCK_UN);
+    fclose($fp);
 }

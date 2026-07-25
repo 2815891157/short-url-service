@@ -11,6 +11,11 @@ RewriteRule ^api$ api.php [L]
 # 默认入口
 DirectoryIndex index.php
 
+# 允许静态文件
+<FilesMatch "\.(css|html|js)$">
+    Require all granted
+</FilesMatch>
+
 # 保护敏感文件
 <FilesMatch "\.(json|log)$">
     Require all denied

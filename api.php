@@ -5,7 +5,7 @@ require_once __DIR__ . '/store.php';
 $ct = $_SERVER['CONTENT_TYPE'] ?? '';
 $is_json = stripos($ct, 'application/json') !== false;
 
-// 路由解析（防止贪婪匹配）
+// 路由解析
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $prefix = '/api.php/';
 if (strpos($uri, $prefix) === 0) {
@@ -13,7 +13,7 @@ if (strpos($uri, $prefix) === 0) {
 } elseif ($uri === '/api.php' || $uri === '/api.php/') {
     $path = '/';
 } else {
-    $path = '/' . trim(str_replace(['api.php', '/api'], '', $uri), '/');
+    json_out(['error' => '接口不存在'], 404);
 }
 $method = $_SERVER['REQUEST_METHOD'];
 $body = $is_json ? (json_decode(file_get_contents('php://input'), true) ?: []) : [];
@@ -37,7 +37,7 @@ if ($path === '/links' && $method === 'POST') {
         if (!preg_match('/^[a-zA-Z0-9]+$/', $slug)) json_out(['error' => '后缀只能包含字母和数字'], 400);
         foreach ($links as $l) { if ($l['slug'] === $slug) json_out(['error' => '后缀已被占用'], 400); }
     } else {
-        for ($i = 0; $i < 10; $i++) {
+        for ($i = 0; $i < 20; $i++) {
             $slug = nanoid();
             $exists = false;
             foreach ($links as $l) { if ($l['slug'] === $slug) { $exists = true; break; } }
@@ -72,31 +72,29 @@ if ($path === '/links' && $method === 'POST') {
     $ips = @getaddrinfo($host, null, AF_UNSPEC, SOCK_STREAM);
     if (!$ips) json_out(['valid' => false, 'reason' => '域名不存在', 'status' => null, 'details' => "DNS 解析失败：{$host}"]);
 
-    // 过滤所有解析到的 IP（含 IPv6）
     $blocked = false;
     $first_ip = '';
     foreach ($ips as $ip_info) {
         $addr = $ip_info['addr'] ?? '';
         if (!$first_ip) $first_ip = $addr;
-        // IPv4 私有/保留
-        if (filter_var($addr, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
-            $blocked = true; break;
-        }
-        // IPv6 私有/本地
-        if (preg_match('/^(::1$|fc|fd|fe80|::ffff:127|::ffff:10|::ffff:172\.(1[6-9]|2[0-9]|3[01])|::ffff:192\.168)/', $addr)) {
-            $blocked = true; break;
-        }
+        if (filter_var($addr, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) { $blocked = true; break; }
+        if (preg_match('/^(::1$|fc|fd|fe80|::ffff:127|::ffff:10|::ffff:172\.(1[6-9]|2[0-9]|3[01])|::ffff:192\.168)/', $addr)) { $blocked = true; break; }
     }
     if ($blocked) json_out(['valid' => false, 'reason' => '禁止检测内网地址', 'status' => null, 'details' => '不允许检测内网或本地地址']);
 
-    // HEAD 请求
     $code = 0;
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
-        curl_setopt_array($ch, [CURLOPT_NOBODY => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5, CURLOPT_TIMEOUT => 8, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => false, CURLOPT_USERAGENT => 'ShortURL-Validator/1.0']);
+        curl_setopt_array($ch, [
+            CURLOPT_NOBODY => true, CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
+            CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 5,
+            CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
+            CURLOPT_USERAGENT => 'ShortURL-Validator/1.0'
+        ]);
         curl_exec($ch); $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
     } else {
-        $ctx = stream_context_create(['http' => ['method' => 'HEAD', 'timeout' => 8, 'follow_location' => true, 'max_redirects' => 5, 'ignore_errors' => true, 'header' => "User-Agent: ShortURL-Validator/1.0\r\n"], 'ssl' => ['verify_peer' => false]]);
+        $ctx = stream_context_create(['http' => ['method' => 'HEAD', 'timeout' => 5, 'follow_location' => true, 'max_redirects' => 3, 'ignore_errors' => true, 'header' => "User-Agent: ShortURL-Validator/1.0\r\n"], 'ssl' => ['verify_peer' => true]]);
         @file_get_contents($url, false, $ctx);
         if (isset($http_response_header)) { foreach ($http_response_header as $h) { if (preg_match('#^HTTP/[\d.]+\s+(\d+)#', $h, $mm)) $code = (int)$mm[1]; } }
     }

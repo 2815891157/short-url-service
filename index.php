@@ -1,5 +1,5 @@
 <?php
-// 用户页面 —— 只能创建短链接，不能查看/删除别人的
+// 用户页面 —— 只能创建短链接
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -63,22 +63,27 @@
     if (!url) return;
     try {
       const r = await fetch('api.php/links', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url, slug: slug||undefined, title: title||undefined}) });
+      if (!r.ok) {
+        const t = await r.text();
+        try { const j = JSON.parse(t); alert(j.error || '创建失败'); }
+        catch { alert('服务器错误，请稍后再试'); }
+        return;
+      }
       const d = await r.json();
-      if (!r.ok) { alert(d.error||'创建失败'); return; }
       resultUrl.textContent = d.shortUrl;
       createResult.classList.remove('hidden');
       document.getElementById('original-url').value = '';
       document.getElementById('custom-slug').value = '';
       document.getElementById('page-title').value = '';
-    } catch(e) { alert('网络错误'); }
+    } catch(e) { alert('网络连接失败，请检查网络'); }
   });
 
   copyBtn.addEventListener('click', () => {
     const t = resultUrl.textContent;
     if (!t) return;
-    if (navigator.clipboard) { navigator.clipboard.writeText(t).then(ok); } else { fallback(t); }
-    function ok() { copyBtn.innerHTML='<i class="ph ph-check"></i> 已复制'; setTimeout(()=>{copyBtn.innerHTML='<i class="ph ph-copy"></i> 复制'},2000); }
-    function fallback(s) { const a=document.createElement('textarea');a.value=s;a.style.cssText='position:fixed;left:-9999px';document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);ok(); }
+    const done = () => { copyBtn.innerHTML='<i class="ph ph-check"></i> 已复制'; setTimeout(()=>{copyBtn.innerHTML='<i class="ph ph-copy"></i> 复制'},2000); };
+    if (navigator.clipboard) { navigator.clipboard.writeText(t).then(done); }
+    else { const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;left:-9999px';document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);done(); }
   });
   </script>
 </body>
