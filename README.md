@@ -2,16 +2,22 @@
 
 PHP 文件存储，无数据库，上传即用。
 
+## 环境要求
+
+- PHP 7.4+
+- Apache + mod_rewrite（AllowOverride All）
+
 ## 使用方法
 
-1. 下载 zip，解压，把用户端文件上传到主机根目录
+1. 下载 zip，解压，上传用户端文件到主机根目录
 2. 打开域名，直接创建短链接
 
 ## 文件结构
 
 **用户端（必须上传）：**
 ```
-.htaccess    api.php     index.php   s.php      store.php   style.css   404.html
+.htaccess    api.php     index.php    s.php
+store.php    style.css   404.html
 ```
 
 **管理后台（可选，单独上传）：**
@@ -21,10 +27,19 @@ admin.php
 
 ## 管理后台
 
-`admin.php` 是一个独立文件，和其他文件完全分离：
+`admin.php` 是独立文件，与其他文件完全分离：
 
-- **上传** → 打开 `admin.php`，首次设置密码，之后可查看/删除所有链接
-- **删除** → 服务照常运行，不受任何影响
+- **上传** → 打开 `admin.php`，首次设置密码（至少 8 位），之后可查看/删除所有链接
+- **删除** → 服务照常运行，不受影响
 - **不用** → 不上传即可，用户端正常工作
 
-密码存储在 `admin_pw.json`（也在根目录），删 `admin.php` 不会丢密码。
+密码存在 `admin_pw.json`，通过 `.htaccess` 禁止外部访问。
+
+## 安全说明
+
+- 短链接跳转使用 307 临时重定向，不缓存
+- URL 检测仅发 HEAD 请求，禁止内网地址（IPv4/IPv6）
+- 所有写操作使用文件锁防止并发竞态
+- 管理后台有 CSRF 防护和 session fixation 防护
+- 创建链接和 URL 检测有 IP 级速率限制
+- `.json` 和 `.log` 文件通过 .htaccess 禁止外部访问

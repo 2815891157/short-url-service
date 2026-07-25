@@ -1,12 +1,17 @@
 RewriteEngine On
 RewriteBase /
 
-# 短链接跳转: /s/xxx -> s.php?slug=xxx
+# 短链接跳转
 RewriteRule ^s/(.+)$ s.php?slug=$1 [L,QSA]
 
-# API: /api/xxx -> api.php/xxx
+# API
 RewriteRule ^api/(.+)$ api.php/$1 [L,QSA]
 RewriteRule ^api$ api.php [L]
 
 # 默认入口
 DirectoryIndex index.php
+
+# 保护敏感文件
+<FilesMatch "\.(json|log)$">
+    Require all denied
+</FilesMatch>

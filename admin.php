@@ -1,7 +1,6 @@
 <?php
 // =====================================================
-// 管理后台 —— 单文件，独立运行
-// 上传此文件即可管理，删除不影响服务
+// 管理后台 —— 单文件独立运行，上传即用，删不影响服务
 // =====================================================
 
 define('DATA_FILE', __DIR__ . '/data.json');
@@ -9,15 +8,38 @@ define('ADMIN_PW_FILE', __DIR__ . '/admin_pw.json');
 
 session_start();
 
+// ---- CSRF Token ----
+function csrf_token() {
+    if (empty($_SESSION['csrf'])) $_SESSION['csrf'] = bin2hex(random_bytes(32));
+    return $_SESSION['csrf'];
+}
+function csrf_field() {
+    return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrf_token()) . '">';
+}
+function csrf_verify() {
+    return isset($_POST['csrf_token']) && hash_equals($_SESSION['csrf'] ?? '', $_POST['csrf_token']);
+}
+
+// ---- 数据操作 ----
 function load_data() {
     if (!file_exists(DATA_FILE)) return [];
-    $d = json_decode(file_get_contents(DATA_FILE), true);
+    $fp = fopen(DATA_FILE, 'r');
+    if (!$fp) return [];
+    flock($fp, LOCK_SH);
+    $raw = file_get_contents(DATA_FILE);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+    $d = json_decode($raw, true);
     return is_array($d) ? $d : [];
 }
 function save_data($d) {
-    $t = DATA_FILE . '.tmp';
-    file_put_contents($t, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT), LOCK_EX);
-    rename($t, DATA_FILE);
+    $fp = fopen(DATA_FILE, 'c');
+    if (!$fp) return;
+    flock($fp, LOCK_EX);
+    ftruncate($fp, 0);
+    fwrite($fp, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+    flock($fp, LOCK_UN);
+    fclose($fp);
 }
 
 // ---- 密码系统 ----
@@ -27,12 +49,13 @@ function get_pw_hash() {
     return $d['hash'] ?? null;
 }
 function set_pw_hash($hash) {
-    file_put_contents(ADMIN_PW_FILE, json_encode(['hash' => $hash], JSON_UNESCAPED_UNICODE));
+    file_put_contents(ADMIN_PW_FILE, json_encode(['hash' => $hash]));
 }
 
 $pw_hash = get_pw_hash();
-$logged_in = isset($_SESSION['admin']) && $_SESSION['admin'] === true;
+$logged_in = !empty($_SESSION['admin']) && $_SESSION['admin'] === true;
 $error = '';
+$flash = '';
 
 // 处理 POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -41,29 +64,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 设置密码（首次）
     if ($act === 'set_password' && !$pw_hash) {
         $pw = $_POST['password'] ?? '';
-        if (strlen($pw) < 4) { $error = '密码至少 4 位'; }
-        else { set_pw_hash(password_hash($pw, PASSWORD_DEFAULT)); $logged_in = true; $_SESSION['admin'] = true; }
+        if (strlen($pw) < 8) { $error = '密码至少 8 位'; }
+        else { set_pw_hash(password_hash($pw, PASSWORD_DEFAULT)); $logged_in = true; $_SESSION['admin'] = true; session_regenerate_id(true); }
     }
 
     // 登录
     if ($act === 'login' && $pw_hash) {
-        $pw = $_POST['password'] ?? '';
-        if (password_verify($pw, $pw_hash)) { $logged_in = true; $_SESSION['admin'] = true; }
-        else { $error = '密码错误'; }
+        if (!csrf_verify()) { $error = '验证失败，请刷新重试'; }
+        else {
+            $pw = $_POST['password'] ?? '';
+            if (password_verify($pw, $pw_hash)) {
+                $logged_in = true; $_SESSION['admin'] = true;
+                session_regenerate_id(true);
+            } else { $error = '密码错误'; }
+        }
     }
 
     // 登出
-    if ($act === 'logout') { $_SESSION = []; session_destroy(); $logged_in = false; }
+    if ($act === 'logout') {
+        if (!csrf_verify()) { $error = '验证失败'; }
+        else { $_SESSION = []; session_destroy(); $logged_in = false; }
+    }
 
     // 删除链接
     if ($act === 'delete' && $logged_in) {
-        $id = (int)($_POST['id'] ?? 0);
-        $links = load_data();
-        $links = array_values(array_filter($links, fn($l) => $l['id'] !== $id));
-        save_data($links);
-        header('Location: admin.php?msg=deleted');
-        exit;
+        if (!csrf_verify()) { $error = '验证失败'; }
+        else {
+            $id = (int)($_POST['id'] ?? 0);
+            $links = load_data();
+            $links = array_values(array_filter($links, fn($l) => $l['id'] !== $id));
+            save_data($links);
+            $flash = '删除成功';
+        }
     }
+}
+
+// Flash message（替代 GET 参数）
+if (isset($_SESSION['flash'])) { $flash = $_SESSION['flash']; unset($_SESSION['flash']); }
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['msg'])) {
+    $flash = $_GET['msg'] === 'deleted' ? '删除成功' : '';
 }
 ?>
 <!DOCTYPE html>
@@ -110,22 +149,23 @@ a:hover{text-decoration:underline}
 <body>
 
 <?php if (!$logged_in): ?>
-<!-- ===== 登录 / 首次设置密码 ===== -->
 <div class="box">
 <h1><i class="ph ph-lock-key"></i> 管理后台</h1>
 <?php if ($error): ?><div class="err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
 
 <?php if (!$pw_hash): ?>
-<p style="color:#8b8fa3;margin-bottom:20px;font-size:.9rem">首次使用，请设置管理密码。</p>
+<p style="color:#8b8fa3;margin-bottom:20px;font-size:.9rem">首次使用，请设置管理密码（至少 8 位）。</p>
 <form method="post">
   <input type="hidden" name="action" value="set_password">
+  <?= csrf_field() ?>
   <label>设置密码 <span class="req">*</span></label>
-  <input type="password" name="password" placeholder="至少 4 位" required autofocus>
+  <input type="password" name="password" placeholder="至少 8 位" required autofocus minlength="8">
   <button type="submit" class="btn btn-primary btn-full"><i class="ph ph-check"></i> 确认设置</button>
 </form>
 <?php else: ?>
 <form method="post">
   <input type="hidden" name="action" value="login">
+  <?= csrf_field() ?>
   <label>输入密码</label>
   <input type="password" name="password" placeholder="管理密码" required autofocus>
   <button type="submit" class="btn btn-primary btn-full"><i class="ph ph-arrow-right"></i> 登录</button>
@@ -134,14 +174,18 @@ a:hover{text-decoration:underline}
 </div>
 
 <?php else: ?>
-<!-- ===== 管理面板 ===== -->
 <div class="box box-full">
 <div class="topbar">
   <h1><i class="ph ph-list"></i> 短链接管理</h1>
-  <form method="post" style="display:inline"><input type="hidden" name="action" value="logout"><button class="btn btn-sm" style="background:#242836;color:#8b8fa3"><i class="ph ph-sign-out"></i> 登出</button></form>
+  <form method="post" style="display:inline">
+    <input type="hidden" name="action" value="logout">
+    <?= csrf_field() ?>
+    <button class="btn btn-sm" style="background:#242836;color:#8b8fa3"><i class="ph ph-sign-out"></i> 登出</button>
+  </form>
 </div>
 
-<?php if (isset($_GET['msg'])): ?><div class="msg"><i class="ph ph-check-circle"></i> 操作成功</div><?php endif; ?>
+<?php if ($flash): ?><div class="msg"><i class="ph ph-check-circle"></i> <?= htmlspecialchars($flash) ?></div><?php endif; ?>
+<?php if ($error): ?><div class="err"><i class="ph ph-warning-circle"></i> <?= htmlspecialchars($error) ?></div><?php endif; ?>
 
 <?php
 $links = load_data();
@@ -172,6 +216,7 @@ $total_visits = array_sum(array_column($links, 'visit_count'));
     <form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
       <input type="hidden" name="action" value="delete">
       <input type="hidden" name="id" value="<?= $l['id'] ?>">
+      <?= csrf_field() ?>
       <button class="btn btn-danger btn-sm"><i class="ph ph-trash"></i></button>
     </form>
   </td>

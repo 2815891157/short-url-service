@@ -1,14 +1,28 @@
 <?php
 require_once __DIR__ . '/store.php';
 
-$uri = $_SERVER['REQUEST_URI'];
-$path = preg_replace('#^.*api\.php#', '', parse_url($uri, PHP_URL_PATH));
-$path = '/' . trim($path, '/');
-$method = $_SERVER['REQUEST_METHOD'];
-$body = json_decode(file_get_contents('php://input'), true) ?: [];
+// Content-Type 校验
+$ct = $_SERVER['CONTENT_TYPE'] ?? '';
+$is_json = stripos($ct, 'application/json') !== false;
 
-// 创建短链接
+// 路由解析（防止贪婪匹配）
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+$prefix = '/api.php/';
+if (strpos($uri, $prefix) === 0) {
+    $path = '/' . substr($uri, strlen($prefix));
+} elseif ($uri === '/api.php' || $uri === '/api.php/') {
+    $path = '/';
+} else {
+    $path = '/' . trim(str_replace(['api.php', '/api'], '', $uri), '/');
+}
+$method = $_SERVER['REQUEST_METHOD'];
+$body = $is_json ? (json_decode(file_get_contents('php://input'), true) ?: []) : [];
+
+// ---- 创建短链接 ----
 if ($path === '/links' && $method === 'POST') {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    rate_limit('create:' . $ip, 10, 60);
+
     $url = trim($body['url'] ?? '');
     $slug = trim($body['slug'] ?? '');
     $title = trim($body['title'] ?? '');
@@ -20,7 +34,7 @@ if ($path === '/links' && $method === 'POST') {
 
     if ($slug !== '') {
         if (strlen($slug) > 32) json_out(['error' => '后缀不能超过 32 字符'], 400);
-        if (!preg_match('/^[a-zA-Z0-9_-]+$/', $slug)) json_out(['error' => '后缀只能包含字母数字下划线连字符'], 400);
+        if (!preg_match('/^[a-zA-Z0-9]+$/', $slug)) json_out(['error' => '后缀只能包含字母和数字'], 400);
         foreach ($links as $l) { if ($l['slug'] === $slug) json_out(['error' => '后缀已被占用'], 400); }
     } else {
         for ($i = 0; $i < 10; $i++) {
@@ -43,8 +57,11 @@ if ($path === '/links' && $method === 'POST') {
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
     json_out(['id' => $new['id'], 'slug' => $slug, 'shortUrl' => $scheme . '://' . $host . '/s/' . $slug, 'originalUrl' => $url, 'title' => $title]);
 
-// 检测网址
+// ---- 检测网址 ----
 } elseif ($path === '/validate-url' && $method === 'POST') {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    rate_limit('validate:' . $ip, 5, 60);
+
     $url = trim($body['url'] ?? '');
     if ($url === '') json_out(['error' => '请输入网址'], 400);
     $parsed = parse_url($url);
@@ -52,11 +69,27 @@ if ($path === '/links' && $method === 'POST') {
     if (!in_array($parsed['scheme'] ?? '', ['http', 'https'])) json_out(['valid' => false, 'reason' => '不支持的协议', 'status' => null, 'details' => '仅支持 HTTP/HTTPS']);
 
     $host = $parsed['host'];
-    $ip = gethostbyname($host);
-    if ($ip === $host && !filter_var($ip, FILTER_VALIDATE_IP)) json_out(['valid' => false, 'reason' => '域名不存在', 'status' => null, 'details' => "DNS 解析失败：{$host}"]);
-    if (filter_var($ip, FILTER_VALIDATE_IP) && preg_match('/^(127\.|10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.|0\.0\.0\.0|169\.254\.)/', $ip))
-        json_out(['valid' => false, 'reason' => '禁止检测内网', 'status' => null, 'details' => '不允许检测内网地址']);
+    $ips = @getaddrinfo($host, null, AF_UNSPEC, SOCK_STREAM);
+    if (!$ips) json_out(['valid' => false, 'reason' => '域名不存在', 'status' => null, 'details' => "DNS 解析失败：{$host}"]);
 
+    // 过滤所有解析到的 IP（含 IPv6）
+    $blocked = false;
+    $first_ip = '';
+    foreach ($ips as $ip_info) {
+        $addr = $ip_info['addr'] ?? '';
+        if (!$first_ip) $first_ip = $addr;
+        // IPv4 私有/保留
+        if (filter_var($addr, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            $blocked = true; break;
+        }
+        // IPv6 私有/本地
+        if (preg_match('/^(::1$|fc|fd|fe80|::ffff:127|::ffff:10|::ffff:172\.(1[6-9]|2[0-9]|3[01])|::ffff:192\.168)/', $addr)) {
+            $blocked = true; break;
+        }
+    }
+    if ($blocked) json_out(['valid' => false, 'reason' => '禁止检测内网地址', 'status' => null, 'details' => '不允许检测内网或本地地址']);
+
+    // HEAD 请求
     $code = 0;
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
@@ -67,9 +100,9 @@ if ($path === '/links' && $method === 'POST') {
         @file_get_contents($url, false, $ctx);
         if (isset($http_response_header)) { foreach ($http_response_header as $h) { if (preg_match('#^HTTP/[\d.]+\s+(\d+)#', $h, $mm)) $code = (int)$mm[1]; } }
     }
-    if ($code === 0) json_out(['valid' => false, 'reason' => '连接失败', 'status' => null, 'details' => "域名解析到 {$ip}，连接失败"]);
+    if ($code === 0) json_out(['valid' => false, 'reason' => '连接失败', 'status' => null, 'details' => "域名解析到 {$first_ip}，连接失败"]);
     $ok = ($code >= 200 && $code < 400);
-    json_out(['valid' => $ok, 'reason' => $ok ? '网址可访问' : "HTTP {$code}", 'status' => $code, 'details' => $ok ? "域名 {$ip}，HTTP {$code}，有效。" : "域名 {$ip}，HTTP {$code}，可能失效。"]);
+    json_out(['valid' => $ok, 'reason' => $ok ? '网址可访问' : "HTTP {$code}", 'status' => $code, 'details' => $ok ? "域名 {$first_ip}，HTTP {$code}，有效。" : "域名 {$first_ip}，HTTP {$code}，可能失效。"]);
 
 } else {
     json_out(['error' => '接口不存在'], 404);
