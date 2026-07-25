@@ -1,20 +1,24 @@
 <?php
-require_once __DIR__ . '/init.php';
-$db = get_db();
+require_once __DIR__ . '/store.php';
 
 $slug = $_GET['slug'] ?? '';
 if ($slug === '') { header('Location: /'); exit; }
 
 $slug = urldecode($slug);
-$stmt = $db->prepare('SELECT original_url FROM links WHERE slug = ?');
-$stmt->bind_param('s', $slug); $stmt->execute();
-$row = $stmt->get_result()->fetch_assoc(); $stmt->close();
+$links = load_data();
 
-if (!$row) { http_response_code(404); readfile(__DIR__ . '/404.html'); exit; }
+$found = null;
+foreach ($links as $l) { if ($l['slug'] === $slug) { $found = $l; break; } }
 
-$upd = $db->prepare('UPDATE links SET visit_count = visit_count + 1 WHERE slug = ?');
-$upd->bind_param('s', $slug); $upd->execute(); $upd->close();
+if (!$found) { http_response_code(404); readfile(__DIR__ . '/404.html'); exit; }
+
+// 增加访问计数
+foreach ($links as &$l) {
+    if ($l['slug'] === $slug) { $l['visit_count']++; break; }
+}
+unset($l);
+save_data($links);
 
 header('HTTP/1.1 302 Found');
-header('Location: ' . $row['original_url']);
+header('Location: ' . $found['original_url']);
 exit;

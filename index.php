@@ -1,4 +1,7 @@
-<?php require_once __DIR__ . '/init.php'; ?>
+<?php
+// 主页面 —— 无需任何配置，上传即用
+// data.json 会在首次使用时自动创建
+?>
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>

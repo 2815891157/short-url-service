@@ -1,4 +1,2 @@
-.env
+data.json
 *.log
-config.php
-node_modules/
