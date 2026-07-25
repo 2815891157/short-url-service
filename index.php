@@ -37,6 +37,14 @@
   </main>
   <footer class="footer"><div class="container"><i class="ph ph-shield-check"></i> 短链接服务</div></footer>
   <script>
+  // 前端速率限制（localStorage）
+  const RATE_KEY = 'shorturl_create_times';
+  const RATE_MAX = 25;
+  const RATE_WINDOW = 86400000;
+  function getRateTimes() { try { return JSON.parse(localStorage.getItem(RATE_KEY)) || []; } catch { return []; } }
+  function checkRate() { const n = Date.now(); const t = getRateTimes().filter(x => n - x < RATE_WINDOW); localStorage.setItem(RATE_KEY, JSON.stringify(t)); return t.length < RATE_MAX; }
+  function recordRate() { const t = getRateTimes(); t.push(Date.now()); localStorage.setItem(RATE_KEY, JSON.stringify(t)); }
+
   const createForm = document.getElementById('create-form');
   const createResult = document.getElementById('create-result');
   const resultUrl = document.getElementById('result-url');
@@ -44,6 +52,7 @@
 
   createForm.addEventListener('submit', async e => {
     e.preventDefault();
+    if (!checkRate()) { alert('今天创建次数已达上限（每天 ' + RATE_MAX + ' 次），请明天再试'); return; }
     const url = document.getElementById('original-url').value.trim();
     if (!url) return;
     try {
@@ -54,6 +63,7 @@
         catch { alert('服务器错误'); }
         return;
       }
+      recordRate();
       const d = await r.json();
       resultUrl.textContent = d.shortUrl;
       createResult.classList.remove('hidden');

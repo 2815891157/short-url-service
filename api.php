@@ -1,6 +1,15 @@
 <?php
 require_once __DIR__ . '/store.php';
 
+// API 来源校验 — 只允许本站页面发起的请求
+$origin = $_SERVER['HTTP_ORIGIN'] ?? $_SERVER['HTTP_REFERER'] ?? '';
+$site_host = $_SERVER['HTTP_HOST'] ?? '';
+if ($origin === '' || !str_contains($origin, $site_host)) {
+    http_response_code(403);
+    echo json_encode(['error' => '非法请求'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
 $ct = $_SERVER['CONTENT_TYPE'] ?? '';
 $is_json = stripos($ct, 'application/json') !== false;
 
@@ -19,7 +28,7 @@ $body = $is_json ? (json_decode(file_get_contents('php://input'), true) ?: []) :
 // ---- 创建短链接 ----
 if ($path === '/links' && $method === 'POST') {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    rate_limit('create:' . $ip, 25, 86400);
+    rate_limit('create:' . $ip, 100, 86400);
 
     $url = trim($body['url'] ?? '');
     if ($url === '') json_out(['error' => '请输入目标网址'], 400);
@@ -28,7 +37,6 @@ if ($path === '/links' && $method === 'POST') {
     $parsed = parse_url($url);
     if (!$parsed || !in_array($parsed['scheme'] ?? '', ['http', 'https'])) json_out(['error' => '仅支持 http/https'], 400);
 
-    $site_host = $_SERVER['HTTP_HOST'] ?? '';
     if (parse_url($url, PHP_URL_HOST) === $site_host) json_out(['error' => '不能指向本站域名'], 400);
 
     $links = load_data();
