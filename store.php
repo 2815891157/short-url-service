@@ -38,13 +38,17 @@ function nanoid($len = 7) {
     return $id;
 }
 
-// IP 速率限制（带文件锁）
+// IP 速率限制（带文件锁 + 自动清理）
 function rate_limit($key, $max = 10, $window = 60) {
     $dir = __DIR__ . '/.rate';
+    if (!is_dir($dir)) { if (!mkdir($dir, 0755)) return; }
 
-    // 目录不存在则尝试创建，失败则降级为不限速
-    if (!is_dir($dir)) {
-        if (!mkdir($dir, 0755)) return;
+    // 清理超过 24 小时的文件（每 100 次请求触发一次）
+    if (random_int(1, 100) === 1) {
+        $now = time();
+        foreach (glob($dir . '/*.json') as $f) {
+            if ($now - filemtime($f) > 86400) @unlink($f);
+        }
     }
 
     $file = $dir . '/' . md5($key) . '.json';

@@ -1,11 +1,9 @@
 <?php
 require_once __DIR__ . '/store.php';
 
-// Content-Type 校验
 $ct = $_SERVER['CONTENT_TYPE'] ?? '';
 $is_json = stripos($ct, 'application/json') !== false;
 
-// 路由解析
 $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
 $prefix = '/api.php/';
 if (strpos($uri, $prefix) === 0) {
@@ -21,20 +19,27 @@ $body = $is_json ? (json_decode(file_get_contents('php://input'), true) ?: []) :
 // ---- 创建短链接 ----
 if ($path === '/links' && $method === 'POST') {
     $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
-    rate_limit('create:' . $ip, 10, 60);
+    rate_limit('create:' . $ip, 25, 86400);
 
     $url = trim($body['url'] ?? '');
     if ($url === '') json_out(['error' => '请输入目标网址'], 400);
+    if (strlen($url) < 15) json_out(['error' => '网址太短'], 400);
+    if (strlen($url) > 1000) json_out(['error' => '网址不能超过 1000 个字符'], 400);
     $parsed = parse_url($url);
     if (!$parsed || !in_array($parsed['scheme'] ?? '', ['http', 'https'])) json_out(['error' => '仅支持 http/https'], 400);
 
+    $site_host = $_SERVER['HTTP_HOST'] ?? '';
+    if (parse_url($url, PHP_URL_HOST) === $site_host) json_out(['error' => '不能指向本站域名'], 400);
+
     $links = load_data();
+    $exists = false;
     for ($i = 0; $i < 20; $i++) {
         $slug = nanoid();
         $exists = false;
         foreach ($links as $l) { if ($l['slug'] === $slug) { $exists = true; break; } }
         if (!$exists) break;
     }
+    if ($exists) json_out(['error' => '生成失败，请重试'], 500);
 
     $new = [
         'id' => count($links) > 0 ? max(array_column($links, 'id')) + 1 : 1,
@@ -44,9 +49,8 @@ if ($path === '/links' && $method === 'POST') {
     $links[] = $new;
     save_data($links);
 
-    $host = $_SERVER['HTTP_HOST'] ?? '';
     $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
-    json_out(['id' => $new['id'], 'slug' => $slug, 'shortUrl' => $scheme . '://' . $host . '/s/' . $slug, 'originalUrl' => $url]);
+    json_out(['id' => $new['id'], 'slug' => $slug, 'shortUrl' => $scheme . '://' . $site_host . '/s/' . $slug, 'originalUrl' => $url]);
 
 // ---- 检测网址 ----
 } elseif ($path === '/validate-url' && $method === 'POST') {
@@ -78,14 +82,14 @@ if ($path === '/links' && $method === 'POST') {
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_NOBODY => true, CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 3,
+            CURLOPT_FOLLOWLOCATION => false, CURLOPT_MAXREDIRS => 0,
             CURLOPT_TIMEOUT => 5, CURLOPT_CONNECTTIMEOUT => 5,
             CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
             CURLOPT_USERAGENT => 'ShortURL-Validator/1.0'
         ]);
         curl_exec($ch); $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE); curl_close($ch);
     } else {
-        $ctx = stream_context_create(['http' => ['method' => 'HEAD', 'timeout' => 5, 'follow_location' => true, 'max_redirects' => 3, 'ignore_errors' => true, 'header' => "User-Agent: ShortURL-Validator/1.0\r\n"], 'ssl' => ['verify_peer' => true]]);
+        $ctx = stream_context_create(['http' => ['method' => 'HEAD', 'timeout' => 5, 'follow_location' => false, 'max_redirects' => 0, 'ignore_errors' => true, 'header' => "User-Agent: ShortURL-Validator/1.0\r\n"], 'ssl' => ['verify_peer' => true]]);
         @file_get_contents($url, false, $ctx);
         if (isset($http_response_header)) { foreach ($http_response_header as $h) { if (preg_match('#^HTTP/[\d.]+\s+(\d+)#', $h, $mm)) $code = (int)$mm[1]; } }
     }

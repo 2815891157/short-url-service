@@ -22,7 +22,7 @@
       <form id="create-form">
         <div class="form-group">
           <label for="original-url">目标网址 <span class="required">*</span></label>
-          <input type="url" id="original-url" placeholder="https://example.com/your-long-url" required>
+          <input type="url" id="original-url" placeholder="https://example.com/your-long-url" required maxlength="1000">
         </div>
         <button type="submit" class="btn btn-primary btn-full"><i class="ph ph-magic-wand"></i> 生成短链接</button>
       </form>

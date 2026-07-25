@@ -30,7 +30,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'delet
     save_data($links);
     $flash = '删除成功';
 }
-if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') $flash = '删除成功';
 
 $links = load_data();
 usort($links, fn($a, $b) => strtotime($b['created_at']) - strtotime($a['created_at']));
@@ -55,17 +54,17 @@ h1 i{color:#4f7df7}
 .btn-danger:hover{background:#c0392b}
 .btn-sm{padding:5px 10px;font-size:.78rem}
 .msg{background:#1b2d1b;border:1px solid #2ecc71;color:#2ecc71;padding:10px 14px;margin-bottom:16px;font-size:.85rem}
-table{width:100%;border-collapse:collapse;margin-top:16px}
+.table-wrap{overflow-x:auto}
+table{width:100%;table-layout:fixed;border-collapse:collapse;margin-top:16px}
 th,td{padding:10px 12px;border-bottom:1px solid #2d3142;text-align:left;font-size:.85rem}
 th{background:#242836;font-weight:600;color:#8b8fa3}
 td{color:#e4e6ef}
-.slug{color:#4f7df7;font-family:monospace;font-weight:600}
-.url{color:#8b8fa3;word-break:break-all;max-width:400px}
-.meta{color:#5c6073;font-size:.78rem}
+.slug{width:140px;color:#4f7df7;font-family:monospace;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.url{color:#8b8fa3;word-break:break-all;overflow:hidden}
+.meta{width:90px;white-space:nowrap;color:#5c6073;font-size:.78rem}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:20px}
 .empty{text-align:center;padding:40px;color:#5c6073}
-a{color:#4f7df7;text-decoration:none}
-a:hover{text-decoration:underline}
+a{color:#4f7df7;text-decoration:none}a:hover{text-decoration:underline}
 </style>
 </head>
 <body>
@@ -85,6 +84,7 @@ a:hover{text-decoration:underline}
 <?php if ($total === 0): ?>
 <div class="empty"><i class="ph ph-link-break" style="font-size:2rem;display:block;margin-bottom:8px"></i>暂无短链接</div>
 <?php else: ?>
+<div class="table-wrap">
 <table>
 <thead><tr><th>短链接</th><th>目标网址</th><th>访问</th><th>创建时间</th><th></th></tr></thead>
 <tbody>
@@ -92,8 +92,8 @@ a:hover{text-decoration:underline}
 <tr>
   <td class="slug">/s/<?= htmlspecialchars($l['slug']) ?></td>
   <td class="url"><a href="<?= htmlspecialchars($l['original_url']) ?>" target="_blank"><?= htmlspecialchars($l['original_url']) ?></a></td>
-  <td class="meta"><?= $l['visit_count'] ?></td>
-  <td class="meta"><?= $l['created_at'] ?></td>
+  <td class="meta"><?= htmlspecialchars($l['visit_count']) ?></td>
+  <td class="meta"><?= htmlspecialchars($l['created_at']) ?></td>
   <td>
     <form method="post" style="display:inline" onsubmit="return confirm('确定删除？')">
       <input type="hidden" name="action" value="delete">
@@ -105,6 +105,7 @@ a:hover{text-decoration:underline}
 <?php endforeach; ?>
 </tbody>
 </table>
+</div>
 <?php endif; ?>
 </div>
 </body>
