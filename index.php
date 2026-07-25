@@ -1,6 +1,5 @@
 <?php
-// 主页面 —— 无需任何配置，上传即用
-// data.json 会在首次使用时自动创建
+// 用户页面 —— 只能创建短链接，不能查看/删除别人的
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -15,72 +14,72 @@
   <header class="header">
     <div class="container">
       <h1 class="logo"><i class="ph ph-link"></i> 短链接服务</h1>
-      <nav class="nav-tabs">
-        <button class="nav-tab active" data-tab="create"><i class="ph ph-plus-circle"></i> 创建</button>
-        <button class="nav-tab" data-tab="manage"><i class="ph ph-list"></i> 管理</button>
-        <button class="nav-tab" data-tab="validate"><i class="ph ph-magnifying-glass"></i> 检测</button>
-      </nav>
     </div>
   </header>
-  <main class="container">
-    <section id="tab-create" class="tab-content active">
-      <div class="card">
-        <h2 class="card-title"><i class="ph ph-link"></i> 创建短链接</h2>
-        <form id="create-form">
-          <div class="form-group">
-            <label for="original-url">目标网址 <span class="required">*</span></label>
-            <input type="url" id="original-url" placeholder="https://example.com/your-long-url" required>
-          </div>
-          <div class="form-row">
-            <div class="form-group flex-1">
-              <label for="custom-slug">自定义后缀 <span class="optional">（可选）</span></label>
-              <div class="input-with-prefix">
-                <span class="input-prefix">/s/</span>
-                <input type="text" id="custom-slug" placeholder="my-link">
-              </div>
-            </div>
-            <div class="form-group flex-1">
-              <label for="page-title">标题 <span class="optional">（可选）</span></label>
-              <input type="text" id="page-title" placeholder="给链接起个名字">
+  <main class="container" style="padding-top:32px;padding-bottom:32px">
+    <div class="card">
+      <h2 class="card-title"><i class="ph ph-link"></i> 创建短链接</h2>
+      <form id="create-form">
+        <div class="form-group">
+          <label for="original-url">目标网址 <span class="required">*</span></label>
+          <input type="url" id="original-url" placeholder="https://example.com/your-long-url" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group flex-1">
+            <label for="custom-slug">自定义后缀 <span class="optional">（可选）</span></label>
+            <div class="input-with-prefix">
+              <span class="input-prefix">/s/</span>
+              <input type="text" id="custom-slug" placeholder="my-link">
             </div>
           </div>
-          <button type="submit" class="btn btn-primary btn-full"><i class="ph ph-magic-wand"></i> 生成短链接</button>
-        </form>
-        <div id="create-result" class="result-box hidden">
-          <div class="result-header"><i class="ph ph-check-circle"></i> 短链接已创建</div>
-          <div class="result-body">
-            <div class="result-url" id="result-url"></div>
-            <button class="btn btn-secondary" id="copy-btn"><i class="ph ph-copy"></i> 复制</button>
+          <div class="form-group flex-1">
+            <label for="page-title">标题 <span class="optional">（可选）</span></label>
+            <input type="text" id="page-title" placeholder="给链接起个名字">
           </div>
         </div>
-      </div>
-    </section>
-    <section id="tab-manage" class="tab-content">
-      <div class="card">
-        <div class="card-header-row">
-          <h2 class="card-title"><i class="ph ph-list"></i> 所有短链接</h2>
-          <button class="btn btn-secondary btn-sm" id="refresh-btn"><i class="ph ph-arrow-clockwise"></i> 刷新</button>
+        <button type="submit" class="btn btn-primary btn-full"><i class="ph ph-magic-wand"></i> 生成短链接</button>
+      </form>
+      <div id="create-result" class="result-box hidden">
+        <div class="result-header"><i class="ph ph-check-circle"></i> 短链接已创建</div>
+        <div class="result-body">
+          <div class="result-url" id="result-url"></div>
+          <button class="btn btn-secondary" id="copy-btn"><i class="ph ph-copy"></i> 复制</button>
         </div>
-        <div id="links-list" class="links-list"><div class="loading"><i class="ph ph-spinner"></i> 加载中...</div></div>
-        <div id="no-links" class="empty-state hidden"><i class="ph ph-link-break"></i><p>暂无短链接，请在「创建」页面添加</p></div>
       </div>
-    </section>
-    <section id="tab-validate" class="tab-content">
-      <div class="card">
-        <h2 class="card-title"><i class="ph ph-magnifying-glass"></i> 检测网址有效性</h2>
-        <p class="card-desc"><i class="ph ph-info"></i> 输入网址后，系统通过 DNS 解析和 HEAD 请求检测该网址是否有效，不下载页面内容。</p>
-        <form id="validate-form">
-          <div class="form-group">
-            <label for="validate-url">要检测的网址</label>
-            <input type="url" id="validate-url" placeholder="https://example.com" required>
-          </div>
-          <button type="submit" class="btn btn-primary btn-full"><i class="ph ph-magnifying-glass"></i> 开始检测</button>
-        </form>
-        <div id="validate-result" class="result-box hidden"></div>
-      </div>
-    </section>
+    </div>
   </main>
-  <footer class="footer"><div class="container"><i class="ph ph-shield-check"></i> 短链接服务 - 安全、快速、无追踪</div></footer>
-  <script src="app.js"></script>
+  <footer class="footer"><div class="container"><i class="ph ph-shield-check"></i> 短链接服务</div></footer>
+  <script>
+  const createForm = document.getElementById('create-form');
+  const createResult = document.getElementById('create-result');
+  const resultUrl = document.getElementById('result-url');
+  const copyBtn = document.getElementById('copy-btn');
+
+  createForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    const url = document.getElementById('original-url').value.trim();
+    const slug = document.getElementById('custom-slug').value.trim();
+    const title = document.getElementById('page-title').value.trim();
+    if (!url) return;
+    try {
+      const r = await fetch('api.php/links', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url, slug: slug||undefined, title: title||undefined}) });
+      const d = await r.json();
+      if (!r.ok) { alert(d.error||'创建失败'); return; }
+      resultUrl.textContent = d.shortUrl;
+      createResult.classList.remove('hidden');
+      document.getElementById('original-url').value = '';
+      document.getElementById('custom-slug').value = '';
+      document.getElementById('page-title').value = '';
+    } catch(e) { alert('网络错误'); }
+  });
+
+  copyBtn.addEventListener('click', () => {
+    const t = resultUrl.textContent;
+    if (!t) return;
+    if (navigator.clipboard) { navigator.clipboard.writeText(t).then(ok); } else { fallback(t); }
+    function ok() { copyBtn.innerHTML='<i class="ph ph-check"></i> 已复制'; setTimeout(()=>{copyBtn.innerHTML='<i class="ph ph-copy"></i> 复制'},2000); }
+    function fallback(s) { const a=document.createElement('textarea');a.value=s;a.style.cssText='position:fixed;left:-9999px';document.body.appendChild(a);a.select();document.execCommand('copy');document.body.removeChild(a);ok(); }
+  });
+  </script>
 </body>
 </html>
