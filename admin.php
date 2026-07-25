@@ -37,7 +37,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-if (isset($_GET['msg']) && $_GET['msg'] === 'deleted') $flash = '删除成功';
 
 $links = load_data();
 usort($links, fn($a, $b) => strtotime($b['created_at']) - strtotime($a['created_at']));

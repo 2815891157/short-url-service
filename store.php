@@ -31,7 +31,7 @@ function json_out($data, $code = 200) {
 }
 
 function nanoid($len = 7) {
-    $c = '01223456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+    $c = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
     $n = strlen($c) - 1;
     $id = '';
     for ($i = 0; $i < $len; $i++) $id .= $c[random_int(0, $n)];

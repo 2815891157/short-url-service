@@ -4,7 +4,6 @@ require_once __DIR__ . '/store.php';
 $slug = $_GET['slug'] ?? '';
 if ($slug === '') { header('Location: /'); exit; }
 
-$slug = urldecode($slug);
 
 // 跳转速率限制（每 IP 每分钟 60 次）
 $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
