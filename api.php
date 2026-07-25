@@ -69,13 +69,13 @@ if ($path === '/links' && $method === 'POST') {
     if (!in_array($parsed['scheme'] ?? '', ['http', 'https'])) json_out(['valid' => false, 'reason' => '不支持的协议', 'status' => null, 'details' => '仅支持 HTTP/HTTPS']);
 
     $host = $parsed['host'];
-    $ips = @getaddrinfo($host, null, AF_UNSPEC, SOCK_STREAM);
-    if (!$ips) json_out(['valid' => false, 'reason' => '域名不存在', 'status' => null, 'details' => "DNS 解析失败：{$host}"]);
+    $records = @dns_get_record($host, DNS_A | DNS_AAAA);
+    $ips = $records ? array_column($records, 'ip') : [];
+    if (empty($ips)) json_out(['valid' => false, 'reason' => '域名不存在', 'status' => null, 'details' => "DNS 解析失败：{$host}"]);
 
     $blocked = false;
     $first_ip = '';
-    foreach ($ips as $ip_info) {
-        $addr = $ip_info['addr'] ?? '';
+    foreach ($ips as $addr) {
         if (!$first_ip) $first_ip = $addr;
         if (filter_var($addr, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) { $blocked = true; break; }
         if (preg_match('/^(::1$|fc|fd|fe80|::ffff:127|::ffff:10|::ffff:172\.(1[6-9]|2[0-9]|3[01])|::ffff:192\.168)/', $addr)) { $blocked = true; break; }

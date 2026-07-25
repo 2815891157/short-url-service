@@ -41,7 +41,12 @@ function nanoid($len = 7) {
 // IP 速率限制（带文件锁）
 function rate_limit($key, $max = 10, $window = 60) {
     $dir = __DIR__ . '/.rate';
-    if (!is_dir($dir)) @mkdir($dir, 0755);
+
+    // 目录不存在则尝试创建，失败则降级为不限速
+    if (!is_dir($dir)) {
+        if (!mkdir($dir, 0755)) return;
+    }
+
     $file = $dir . '/' . md5($key) . '.json';
     $now = time();
 
